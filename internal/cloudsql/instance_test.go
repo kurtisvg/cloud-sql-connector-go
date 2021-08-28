@@ -86,7 +86,7 @@ func TestConnectInfo(t *testing.T) {
 		}
 	}()
 
-	i, err := NewInstance("my-project:my-region:my-instance", client, RSAKey, 30*time.Second)
+	i, err := NewInstance("my-project:my-region:my-instance", client, RSAKey, 30*time.Second, nil)
 	if err != nil {
 		t.Fatalf("failed to create mock instance: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestConnectInfoErrors(t *testing.T) {
 	defer cleanup()
 
 	// Use a timeout that should fail instantly
-	im, err := NewInstance("my-project:my-region:my-instance", client, RSAKey, 0)
+	im, err := NewInstance("my-project:my-region:my-instance", client, RSAKey, 0, nil)
 	if err != nil {
 		t.Fatalf("failed to initialize Instance: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestClose(t *testing.T) {
 	defer cleanup()
 
 	// Set up an instance and then close it immediately
-	im, err := NewInstance("my-proj:my-region:my-inst", client, RSAKey, 30)
+	im, err := NewInstance("my-proj:my-region:my-inst", client, RSAKey, 30, nil)
 	if err != nil {
 		t.Fatalf("failed to initialize Instance: %v", err)
 	}

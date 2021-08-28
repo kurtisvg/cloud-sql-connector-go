@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/cloudsqlconn/errtypes"
+	"golang.org/x/oauth2"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 )
 
@@ -137,7 +138,13 @@ type Instance struct {
 }
 
 // NewInstance initializes a new Instance given an instance connection name
-func NewInstance(instance string, client *sqladmin.Service, key *rsa.PrivateKey, refreshTimeout time.Duration) (*Instance, error) {
+func NewInstance(
+	instance string,
+	client *sqladmin.Service,
+	key *rsa.PrivateKey,
+	refreshTimeout time.Duration,
+	ts oauth2.TokenSource,
+) (*Instance, error) {
 	cn, err := parseConnName(instance)
 	if err != nil {
 		return nil, err
@@ -151,6 +158,7 @@ func NewInstance(instance string, client *sqladmin.Service, key *rsa.PrivateKey,
 			30*time.Second,
 			2,
 			client,
+			ts,
 		),
 		ctx:    ctx,
 		cancel: cancel,

@@ -21,10 +21,12 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/cloudsqlconn/errtypes"
 	"cloud.google.com/go/cloudsqlconn/internal/trace"
+	"golang.org/x/oauth2"
 	"golang.org/x/time/rate"
 	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 )
@@ -103,10 +105,26 @@ func fetchMetadata(ctx context.Context, client *sqladmin.Service, inst connName)
 	return m, nil
 }
 
-// fetchEphemeralCert uses the Cloud SQL Admin API's createEphemeral method to create a signed TLS
-// certificate that authorized to connect via the Cloud SQL instance's serverside proxy. The cert
-// if valid for approximately one hour.
-func fetchEphemeralCert(ctx context.Context, client *sqladmin.Service, inst connName, key *rsa.PrivateKey) (c tls.Certificate, err error) {
+func refreshToken(ts oauth2.TokenSource, tok *oauth2.Token) (*oauth2.Token, error) {
+	expiredToken := &oauth2.Token{
+		AccessToken:  tok.AccessToken,
+		TokenType:    tok.TokenType,
+		RefreshToken: tok.RefreshToken,
+		Expiry:       time.Time{}.Add(1), // Expired
+	}
+	return oauth2.ReuseTokenSource(expiredToken, ts).Token()
+}
+
+// fetchEphemeralCert uses the Cloud SQL Admin API's createEphemeral method to
+// create a signed TLS certificate that authorized to connect via the Cloud SQL
+// instance's serverside proxy. The cert if valid for approximately one hour.
+func fetchEphemeralCert(
+	ctx context.Context,
+	client *sqladmin.Service,
+	inst connName,
+	key *rsa.PrivateKey,
+	ts oauth2.TokenSource,
+) (c tls.Certificate, err error) {
 	var end trace.EndSpanFunc
 	ctx, end = trace.StartSpan(ctx, "cloud.google.com/go/cloudsqlconn/internal.FetchEphemeralCert")
 	defer func() { end(err) }()
@@ -117,6 +135,31 @@ func fetchEphemeralCert(ctx context.Context, client *sqladmin.Service, inst conn
 
 	req := sqladmin.SslCertsCreateEphemeralRequest{
 		PublicKey: string(pem.EncodeToMemory(&pem.Block{Bytes: clientPubKey, Type: "RSA PUBLIC KEY"})),
+	}
+	var tok *oauth2.Token
+	if ts != nil {
+		var tokErr error
+		tok, tokErr = ts.Token()
+		if tokErr != nil {
+			return tls.Certificate{}, errtypes.NewRefreshError(
+				"failed to retrieve Oauth2 token",
+				inst.String(),
+				tokErr,
+			)
+		}
+		// Always refresh the token to ensure its expiration is far enough in
+		// the future.
+		tok, tokErr = refreshToken(ts, tok)
+		if tokErr != nil {
+			return tls.Certificate{}, errtypes.NewRefreshError(
+				"failed to refresh Oauth2 token",
+				inst.String(),
+				tokErr,
+			)
+		}
+		// TODO: remove this once issue with OAuth2 Tokens is resolved.
+		// See https://github.com/GoogleCloudPlatform/cloudsql-proxy/issues/852.
+		req.AccessToken = strings.TrimRight(tok.AccessToken, ".")
 	}
 	resp, err := client.SslCerts.CreateEphemeral(inst.project, inst.name, &req).Context(ctx).Do()
 	if err != nil {
@@ -143,6 +186,13 @@ func fetchEphemeralCert(ctx context.Context, client *sqladmin.Service, inst conn
 			inst.String(),
 			nil,
 		)
+	}
+	if ts != nil {
+		// Adjust the certificate's expiration to be the earlier of the token's
+		// expiration or the certificate's expiration.
+		if tok.Expiry.Before(clientCert.NotAfter) {
+			clientCert.NotAfter = tok.Expiry
+		}
 	}
 
 	c = tls.Certificate{
@@ -171,6 +221,7 @@ func createTLSConfig(inst connName, m metadata, cert tls.Certificate) *tls.Confi
 		// that will verify that the certificate is OK.
 		InsecureSkipVerify:    true,
 		VerifyPeerCertificate: genVerifyPeerCertificateFunc(inst, certs),
+		MinVersion:            tls.VersionTLS13,
 	}
 	return cfg
 }
@@ -209,11 +260,18 @@ func genVerifyPeerCertificateFunc(cn connName, pool *x509.CertPool) func(rawCert
 }
 
 // newRefresher creates a Refresher.
-func newRefresher(timeout time.Duration, interval time.Duration, burst int, svc *sqladmin.Service) refresher {
+func newRefresher(
+	timeout time.Duration,
+	interval time.Duration,
+	burst int,
+	svc *sqladmin.Service,
+	ts oauth2.TokenSource,
+) refresher {
 	return refresher{
 		timeout:       timeout,
 		clientLimiter: rate.NewLimiter(rate.Every(interval), burst),
 		client:        svc,
+		tokenSource:   ts,
 	}
 }
 
@@ -225,6 +283,7 @@ type refresher struct {
 
 	clientLimiter *rate.Limiter
 	client        *sqladmin.Service
+	tokenSource   oauth2.TokenSource
 }
 
 // performRefresh immediately performs a full refresh operation using the Cloud SQL Admin API.
@@ -270,7 +329,7 @@ func (r refresher) performRefresh(ctx context.Context, cn connName, k *rsa.Priva
 	ecC := make(chan ecRes, 1)
 	go func() {
 		defer close(ecC)
-		ec, err := fetchEphemeralCert(ctx, r.client, cn, k)
+		ec, err := fetchEphemeralCert(ctx, r.client, cn, k, r.tokenSource)
 		ecC <- ecRes{ec, err}
 	}()
 

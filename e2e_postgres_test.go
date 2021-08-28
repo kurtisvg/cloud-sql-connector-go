@@ -37,6 +37,7 @@ var (
 	postgresUser     = os.Getenv("POSTGRES_USER")            // Name of database user.
 	postgresPass     = os.Getenv("POSTGRES_PASS")            // Password for the database user; be careful when entering a password on the command line (it may go into your terminal's history).
 	postgresDb       = os.Getenv("POSTGRES_DB")              // Name of the database to connect to.
+	postgresIAMUser  = os.Getenv("POSTGRES_IAM_USER")        // Name of database IAM user.
 )
 
 func requirePostgresVars(t *testing.T) {
@@ -49,6 +50,8 @@ func requirePostgresVars(t *testing.T) {
 		t.Fatal("'POSTGRES_PASS' env var not set")
 	case postgresDb:
 		t.Fatal("'POSTGRES_DB' env var not set")
+	case postgresIAMUser:
+		t.Fatal("'POSTGRES_IAM_USER' env var not set")
 	}
 }
 
@@ -64,6 +67,40 @@ func TestPgxConnect(t *testing.T) {
 	}
 	config.DialFunc = func(ctx context.Context, network string, instance string) (net.Conn, error) {
 		return cloudsqlconn.Dial(ctx, postgresConnName)
+	}
+
+	conn, connErr := pgx.ConnectConfig(ctx, config)
+	if connErr != nil {
+		t.Fatalf("failed to connect: %s", connErr)
+	}
+	defer conn.Close(ctx)
+
+	var now time.Time
+	err = conn.QueryRow(context.Background(), "SELECT NOW()").Scan(&now)
+	if err != nil {
+		t.Fatalf("QueryRow failed: %s", err)
+	}
+	t.Log(now)
+}
+
+func TestConnectWithIAMUser(t *testing.T) {
+	requirePostgresVars(t)
+
+	ctx := context.Background()
+
+	// password is intentionally blank
+	dsn := fmt.Sprintf("user=%s password=\"\" dbname=%s sslmode=disable", postgresIAMUser, postgresDb)
+	config, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("failed to parse pgx config: %v", err)
+	}
+	d, err := cloudsqlconn.NewDialer(ctx, cloudsqlconn.WithIAMAuthn())
+	if err != nil {
+		t.Fatalf("failed to initiate Dialer: %v", err)
+	}
+	defer d.Close()
+	config.DialFunc = func(ctx context.Context, network string, instance string) (net.Conn, error) {
+		return d.Dial(ctx, postgresConnName)
 	}
 
 	conn, connErr := pgx.ConnectConfig(ctx, config)

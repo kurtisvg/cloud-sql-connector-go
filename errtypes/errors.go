@@ -58,9 +58,9 @@ type RefreshError struct {
 
 func (e *RefreshError) Error() string {
 	if e.Err == nil {
-		return fmt.Sprintf("Server error: %v", e.genericError)
+		return fmt.Sprintf("Refresh error: %v", e.genericError)
 	}
-	return fmt.Sprintf("Server error: %v: %v", e.genericError, e.Err)
+	return fmt.Sprintf("Refresh error: %v: %v", e.genericError, e.Err)
 }
 
 func (e *RefreshError) Unwrap() error { return e.Err }

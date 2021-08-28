@@ -69,6 +69,15 @@ func TestDialerInstantiationErrors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected NewDialer to return error, but got none.")
 	}
+	_, err = NewDialer(context.Background(),
+		WithCredentialsJSON([]byte("not the JSON you're looking for")))
+	if err == nil {
+		t.Fatalf("expected NewDialer to return error, but got none.")
+	}
+	_, err = NewDialer(context.Background(), WithCredentialsFile("not-a-file.json"))
+	if err == nil {
+		t.Fatalf("expected NewDialer to return error, but got none.")
+	}
 }
 
 func TestDialWithAdminAPIErrors(t *testing.T) {

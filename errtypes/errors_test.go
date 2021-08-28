@@ -33,14 +33,14 @@ func TestErrorFormatting(t *testing.T) {
 			want: "Client error: error message (connection name = \"proj:reg:inst\")",
 		},
 		{
-			desc: "server error message without internal error",
+			desc: "refresh error message without internal error",
 			err:  errtypes.NewRefreshError("error message", "proj:reg:inst", nil),
-			want: "Server error: error message (connection name = \"proj:reg:inst\")",
+			want: "Refresh error: error message (connection name = \"proj:reg:inst\")",
 		},
 		{
-			desc: "server error message with internal error",
+			desc: "refresh error message with internal error",
 			err:  errtypes.NewRefreshError("error message", "proj:reg:inst", errors.New("inner-error")),
-			want: "Server error: error message (connection name = \"proj:reg:inst\"): inner-error",
+			want: "Refresh error: error message (connection name = \"proj:reg:inst\"): inner-error",
 		},
 		{
 			desc: "Dial error without inner error",
