@@ -38,15 +38,20 @@ import (
 )
 
 var (
-	postgresConnName            = os.Getenv("POSTGRES_CONNECTION_NAME")              // "Cloud SQL Postgres instance connection name, in the form of 'project:region:instance'.
-	postgresCASConnName         = os.Getenv("POSTGRES_CAS_CONNECTION_NAME")          // "Cloud SQL Postgres CAS instance connection name, in the form of 'project:region:instance'.
-	postgresCustomerCASConnName = os.Getenv("POSTGRES_CUSTOMER_CAS_CONNECTION_NAME") // "Cloud SQL Postgres Customer CAS instance connection name, in the form of 'project:region:instance'.
-	postgresUser                = os.Getenv("POSTGRES_USER")                         // Name of database user.
-	postgresPass                = os.Getenv("POSTGRES_PASS")                         // Password for the database user; be careful when entering a password on the command line (it may go into your terminal's history).
-	postgresCASPass             = os.Getenv("POSTGRES_CAS_PASS")                     // Password for the database user for CAS instances; be careful when entering a password on the command line (it may go into your terminal's history).
-	postgresCustomerCASPass     = os.Getenv("POSTGRES_CUSTOMER_CAS_PASS")            // Password for the database user for customer CAS instances; be careful when entering a password on the command line (it may go into your terminal's history).
-	postgresDB                  = os.Getenv("POSTGRES_DB")                           // Name of the database to connect to.
-	postgresUserIAM             = os.Getenv("POSTGRES_USER_IAM")                     // Name of database IAM user.
+	postgresConnName             = os.Getenv("POSTGRES_CONNECTION_NAME")              // "Cloud SQL Postgres instance connection name, in the form of 'project:region:instance'.
+	postgresCASConnName          = os.Getenv("POSTGRES_CAS_CONNECTION_NAME")          // "Cloud SQL Postgres CAS instance connection name, in the form of 'project:region:instance'.
+	postgresCustomerCASConnName  = os.Getenv("POSTGRES_CUSTOMER_CAS_CONNECTION_NAME") // "Cloud SQL Postgres Customer CAS instance connection name, in the form of 'project:region:instance'.
+	postgresSANConnName          = os.Getenv("POSTGRES_SAN_CONNECTION_NAME")          // "Cloud SQL Postgres CAS instance connection name, in the form of 'project:region:instance'.
+	postgresSANDomainName        = os.Getenv("POSTGRES_SAN_DOMAIN_NAME")              // Cloud SQL Postgres CAS domain name that is an instance Custom SAN of the postgresSANConnName instance.
+	postgresSANInvalidDomainName = os.Getenv("POSTGRES_SAN_INVALID_DOMAIN_NAME")      // Cloud SQL Postgres CAS domain name that IS NOT an instance Custom SAN of the postgresSANConnName instance.
+	postgresUser                 = os.Getenv("POSTGRES_USER")                         // Name of database user.
+	postgresSANUser              = os.Getenv("POSTGRES_SAN_USER")                     // Name of database user.
+	postgresPass                 = os.Getenv("POSTGRES_PASS")                         // Password for the database user; be careful when entering a password on the command line (it may go into your terminal's history).
+	postgresCASPass              = os.Getenv("POSTGRES_CAS_PASS")                     // Password for the database user for CAS instances; be careful when entering a password on the command line (it may go into your terminal's history).
+	postgresCustomerCASPass      = os.Getenv("POSTGRES_CUSTOMER_CAS_PASS")            // Password for the database user for customer CAS instances; be careful when entering a password on the command line (it may go into your terminal's history).
+	postgresSANPass              = os.Getenv("POSTGRES_SAN_PASS")                     // Password for the database user for SAN domain name instances; be careful when entering a password on the command line (it may go into your terminal's history).
+	postgresDB                   = os.Getenv("POSTGRES_DB")                           // Name of the database to connect to.
+	postgresUserIAM              = os.Getenv("POSTGRES_USER_IAM")                     // Name of database IAM user.
 )
 
 func requirePostgresVars(t *testing.T) {
@@ -57,6 +62,12 @@ func requirePostgresVars(t *testing.T) {
 		t.Fatal("'POSTGRES_CAS_CONNECTION_NAME' env var not set")
 	case postgresCustomerCASConnName:
 		t.Fatal("'POSTGRES_CUSTOMER_CAS_CONNECTION_NAME' env var not set")
+	case postgresSANConnName:
+		t.Fatal("'POSTGRES_SAN_CONNECTION_NAME' env var not set")
+	case postgresSANDomainName:
+		t.Fatal("'POSTGRES_SAN_DOMAIN_NAME' env var not set")
+	case postgresSANInvalidDomainName:
+		t.Fatal("'POSTGRES_SAN_INVALID_DOMAIN_NAME' env var not set")
 	case postgresUser:
 		t.Fatal("'POSTGRES_USER' env var not set")
 	case postgresPass:
@@ -65,6 +76,10 @@ func requirePostgresVars(t *testing.T) {
 		t.Fatal("'POSTGRES_CAS_PASS' env var not set")
 	case postgresCustomerCASPass:
 		t.Fatal("'POSTGRES_CUSTOMER_CAS_PASS' env var not set")
+	case postgresSANUser:
+		t.Fatal("'POSTGRES_SAN_USER' env var not set")
+	case postgresSANPass:
+		t.Fatal("'POSTGRES_SAN_PASS' env var not set")
 	case postgresDB:
 		t.Fatal("'POSTGRES_DB' env var not set")
 	case postgresUserIAM:
@@ -116,6 +131,115 @@ func TestPostgresPgxPoolConnect(t *testing.T) {
 	err = pool.QueryRow(context.Background(), "SELECT NOW()").Scan(&now)
 	if err != nil {
 		t.Fatalf("QueryRow failed: %s", err)
+	}
+	t.Log(now)
+}
+
+func TestPostgresSANDomainConnect(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Postgres integration tests")
+	}
+	requirePostgresVars(t)
+
+	ctx := context.Background()
+
+	// Configure the driver to connect to the database
+	dsn := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", postgresSANUser, postgresSANPass, "postgres")
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("failed to parse pgx config: %v", err)
+	}
+
+	// Create a new dialer with any options
+	d, err := cloudsqlconn.NewDialer(ctx,
+		cloudsqlconn.WithDNSResolver(),
+		// TODO: Remove Additional options.
+		cloudsqlconn.WithQuotaProject("hessjc-playground-01"),
+		cloudsqlconn.WithAdminAPIEndpoint("https://int-108-sqladmin.sandbox.googleapis.com"))
+
+	if err != nil {
+		t.Fatalf("failed to init Dialer: %v", err)
+	}
+
+	// call cleanup when you're done with the database connection to close dialer
+	cleanup := func() error { return d.Close() }
+
+	// Tell the driver to use the Cloud SQL Go Connector to create connections
+	// postgresConnName takes the form of 'project:region:instance'.
+	config.ConnConfig.DialFunc = func(ctx context.Context, _ string, _ string) (net.Conn, error) {
+		return d.Dial(ctx, postgresSANDomainName)
+	}
+
+	// Interact with the driver directly as you normally would
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatalf("failed to create pool: %s", err)
+	}
+	// ... etc
+
+	defer cleanup()
+	defer pool.Close()
+
+	var now time.Time
+	err = pool.QueryRow(context.Background(), "SELECT NOW()").Scan(&now)
+	if err != nil {
+		t.Fatalf("QueryRow failed: %s", err)
+	}
+	t.Log(now)
+}
+
+func TestPostgresSANBadDomainCausesConnectError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Postgres integration tests")
+	}
+	requirePostgresVars(t)
+
+	ctx := context.Background()
+
+	// Configure the driver to connect to the database
+	dsn := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", postgresSANUser, postgresSANPass, "postgres")
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("failed to parse pgx config: %v", err)
+	}
+
+	// Create a new dialer with any options
+	d, err := cloudsqlconn.NewDialer(ctx,
+		cloudsqlconn.WithDNSResolver(),
+		// TODO: Remove Additional options.
+		cloudsqlconn.WithQuotaProject("hessjc-playground-01"),
+		cloudsqlconn.WithAdminAPIEndpoint("https://int-108-sqladmin.sandbox.googleapis.com"))
+
+	if err != nil {
+		t.Fatalf("failed to init Dialer: %v", err)
+	}
+
+	// call cleanup when you're done with the database connection to close dialer
+	cleanup := func() error { return d.Close() }
+
+	// Tell the driver to use the Cloud SQL Go Connector to create connections
+	// postgresConnName takes the form of 'project:region:instance'.
+	config.ConnConfig.DialFunc = func(ctx context.Context, _ string, _ string) (net.Conn, error) {
+		return d.Dial(ctx, postgresSANInvalidDomainName)
+	}
+
+	// Interact with the driver directly as you normally would
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatalf("failed to create pool: %s", err)
+	}
+	// ... etc
+
+	defer cleanup()
+	defer pool.Close()
+
+	var now time.Time
+	err = pool.QueryRow(context.Background(), "SELECT NOW()").Scan(&now)
+	if err == nil {
+		t.Fatal("Want error, got invalid error")
+	}
+	if !strings.Contains(fmt.Sprint(err), "Dial error: handshake failed") {
+		t.Fatal("Want error 'Dial error: handshake failed'.  got: ", err)
 	}
 	t.Log(now)
 }
