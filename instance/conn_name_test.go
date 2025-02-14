@@ -45,3 +45,42 @@ func TestParseConnName(t *testing.T) {
 		}
 	}
 }
+
+func TestIsValidDomain(t *testing.T) {
+	tests := []struct {
+		domain string
+		want   bool
+	}{
+		{
+			domain: "prod-db.mycompany.example.com",
+			want:   true,
+		},
+		{
+			domain: "example.com.", // trailing dot
+			want:   true,
+		},
+		{
+			domain: "-example.com", // leading hyphen
+			want:   false,
+		},
+		{
+			domain: "example", // missing TLD
+			want:   false,
+		},
+		{
+			domain: "127.0.0.1", // IPv4 address
+			want:   false,
+		},
+		{
+			domain: "0:0:0:0:0:0:0:1", // IPv6 address
+			want:   false,
+		},
+	}
+
+	for _, tc := range tests {
+		v := IsValidDomain(tc.domain)
+		if v != tc.want {
+			t.Errorf("IsValidDomainName(%s) failed: want %v, got %v", tc.domain, tc.want, v)
+		}
+	}
+}
