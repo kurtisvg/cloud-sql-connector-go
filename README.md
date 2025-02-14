@@ -99,45 +99,7 @@ To use the dialer with [pgx][], we recommend using connection pooling with
 [pgxpool](https://pkg.go.dev/github.com/jackc/pgx/v5/pgxpool) by configuring
 a [Config.DialFunc][dial-func] like so:
 
-``` go
-import (
-    "context"
-    "net"
-
-    "cloud.google.com/go/cloudsqlconn"
-    "github.com/jackc/pgx/v5/pgxpool"
-)
-
-func connect() {
-    // Configure the driver to connect to the database
-    dsn := "user=myuser password=mypass dbname=mydb sslmode=disable"
-    config, err := pgxpool.ParseConfig(dsn)
-    if err != nil {
-        /* handle error */
-    }
-
-    // Create a new dialer with any options
-    d, err := cloudsqlconn.NewDialer(context.Background())
-    if err != nil {
-        /* handle error */
-    }
-
-    // Tell the driver to use the Cloud SQL Go Connector to create connections
-    config.ConnConfig.DialFunc = func(ctx context.Context, _ string, instance string) (net.Conn, error) {
-        return d.Dial(ctx, "project:region:instance")
-    }
-
-    // Interact with the driver directly as you normally would
-    pool, err := pgxpool.NewWithConfig(context.Background(), config)
-    if err != nil {
-        /* handle error */
-    }
-
-    // call cleanup when you're done with the database connection
-    cleanup := func() error { return d.Close() }
-    // ... etc
-}
-```
+https://github.com/GoogleCloudPlatform/cloud-sql-go-connector/blob/12de0dc122f13c585502e1e0092d1e297377155d/e2e_postgres_test.go#L68-L97
 
 [dial-func]: https://pkg.go.dev/github.com/jackc/pgconn#Config
 
