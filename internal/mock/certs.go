@@ -124,6 +124,9 @@ func mustBuildRootCertificate(subject pkix.Name, k *rsa.PrivateKey) *x509.Certif
 	}
 
 	certDerBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &k.PublicKey, k)
+	if err != nil {
+		panic(err)
+	}
 	c, err := x509.ParseCertificate(certDerBytes)
 	if err != nil {
 		panic(err)
@@ -163,6 +166,9 @@ func mustBuildSignedCertificate(
 	}
 
 	certDerBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &subjectPublicKey.PublicKey, issuerPrivateKey)
+	if err != nil {
+		panic(err)
+	}
 	c, err := x509.ParseCertificate(certDerBytes)
 	if err != nil {
 		panic(err)
