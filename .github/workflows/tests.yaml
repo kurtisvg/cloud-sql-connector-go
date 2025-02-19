@@ -64,7 +64,6 @@ jobs:
         with:
           secrets: |-
             MYSQL_CONNECTION_NAME:${{ vars.GOOGLE_CLOUD_PROJECT }}/MYSQL_CONNECTION_NAME
-            MYSQL_IAM_CONNECTION_NAME:${{ vars.GOOGLE_CLOUD_PROJECT }}/MYSQL_IAM_CONNECTION_NAME
             MYSQL_USER:${{ vars.GOOGLE_CLOUD_PROJECT }}/MYSQL_USER
             MYSQL_USER_IAM:${{ vars.GOOGLE_CLOUD_PROJECT }}/MYSQL_USER_IAM_GO
             MYSQL_PASS:${{ vars.GOOGLE_CLOUD_PROJECT }}/MYSQL_PASS
@@ -86,7 +85,6 @@ jobs:
       - name: Run tests
         env:
           MYSQL_CONNECTION_NAME: "${{ steps.secrets.outputs.MYSQL_CONNECTION_NAME }}"
-          MYSQL_IAM_CONNECTION_NAME: "${{ steps.secrets.outputs.MYSQL_IAM_CONNECTION_NAME }}"
           MYSQL_USER: "${{ steps.secrets.outputs.MYSQL_USER }}"
           MYSQL_USER_IAM: "${{ steps.secrets.outputs.MYSQL_USER_IAM }}"
           MYSQL_PASS: "${{ steps.secrets.outputs.MYSQL_PASS }}"

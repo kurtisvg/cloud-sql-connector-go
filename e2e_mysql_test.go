@@ -32,7 +32,7 @@ var (
 	// "Cloud SQL MySQL instance connection name, in the form of 'project:region:instance'.
 	mysqlConnName = os.Getenv("MYSQL_CONNECTION_NAME")
 	// "Cloud SQL MySQL instance connection name, in the form of 'project:region:instance'.
-	mysqlIAMConnName = os.Getenv("MYSQL_IAM_CONNECTION_NAME")
+	mysqlIAMConnName = os.Getenv("MYSQL_CONNECTION_NAME")
 	// Name of database user.
 	mysqlUser = os.Getenv("MYSQL_USER")
 	// Name of database IAM user.
